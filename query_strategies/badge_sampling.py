@@ -63,14 +63,61 @@ def init_centers(X1, X2, chosen, chosen_list,  mu, D2):
         D2 = distance(X1, X2, mu[0]).ravel().astype(float)
         D2[ind] = 0
     else:
+        # newD = distance(X1, X2, mu[-1]).ravel().astype(float)
+        # D2 = np.minimum(D2, newD)
+        # D2[chosen_list] = 0
+        # Ddist = (D2 ** 2) / sum(D2 ** 2)
+        # customDist = stats.rv_discrete(name='custm', values=(np.arange(len(Ddist)), Ddist))
+        # ind = customDist.rvs(size=1)[0]
+        # while ind in chosen: ind = customDist.rvs(size=1)[0]
+        # mu.append(((X1[0][ind], X1[1][ind]), (X2[0][ind], X2[1][ind])))
+
         newD = distance(X1, X2, mu[-1]).ravel().astype(float)
+
+        # 1) 更新到最近中心的距离（取更小者）
         D2 = np.minimum(D2, newD)
-        D2[chosen_list] = 0
-        Ddist = (D2 ** 2) / sum(D2 ** 2)
-        customDist = stats.rv_discrete(name='custm', values=(np.arange(len(Ddist)), Ddist))
-        ind = customDist.rvs(size=1)[0]
-        while ind in chosen: ind = customDist.rvs(size=1)[0]
+
+        # 2) 屏蔽已选样本
+        D2 = D2.copy()
+        D2[chosen_list] = 0.0
+
+        # 3) 构造有效候选掩码：未选 且 数值有限 且 距离>0
+        valid_mask = np.isfinite(D2) & (D2 > 0)
+        valid_mask[chosen_list] = False
+
+        # 4) 如果没有有效候选（全0或全无效），退化为在未选样本中均匀抽样
+        if not valid_mask.any():
+            # 在未选的索引里均匀采样
+            all_idx = np.arange(len(D2))
+            pool = np.setdiff1d(all_idx, np.fromiter(chosen, dtype=int))
+            # 如果 pool 为空（已选满），就直接返回（或随机给一个未选中的兜底）
+            if len(pool) == 0:
+                ind = 0  # 兜底，不太会走到这里
+            else:
+                ind = np.random.choice(pool)
+        else:
+            # 5) 只对有效候选做概率分布
+            D2_valid = D2[valid_mask]
+            # 使用平方权重（k-means++ 的 D^2 采样思想）
+            w = D2_valid ** 2
+
+            # 防止浮点精度问题：若总和非常小，直接用均匀分布
+            total = w.sum()
+            if not np.isfinite(total) or total <= 0:
+                w = np.ones_like(w)
+                total = w.sum()
+
+            p = w / total
+
+            # 用 numpy 采样（比 rv_discrete 更直观）
+            valid_indices = np.where(valid_mask)[0]
+            ind = np.random.choice(valid_indices, p=p)
+
+        # 6) 记录新中心
         mu.append(((X1[0][ind], X1[1][ind]), (X2[0][ind], X2[1][ind])))
+
+
+
     chosen.add(ind)
     chosen_list.append(ind)
     print(str(len(mu)) + '\t' + str(sum(D2)), flush=True)

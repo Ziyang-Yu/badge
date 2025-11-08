@@ -48,7 +48,7 @@ print(opts, flush=True)
 # parameters
 NUM_INIT_LB = opts.nStart
 NUM_QUERY = opts.nQuery
-NUM_ROUND = int((opts.nEnd - NUM_INIT_LB)/ opts.nQuery)
+NUM_ROUND = int((opts.nEnd - opts.nStart)/ opts.nQuery)
 DATA_NAME = opts.data
 
 # regularization settings for bait
